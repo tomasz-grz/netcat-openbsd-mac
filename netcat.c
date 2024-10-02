@@ -112,6 +112,7 @@ int unix_connect(char *);
 int unix_listen(char *);
 void set_common_sockopts(int);
 int parse_iptos(char *);
+void report_sock(const char *, const struct sockaddr *, socklen_t, char *);
 void usage(int);
 char *proto_name(int);
 
@@ -936,6 +937,33 @@ int parse_iptos(char *s) {
   if (sscanf(s, "0x%x", &tos) != 1 || tos < 0 || tos > 0xff)
     errx(1, "invalid IP Type of Service");
   return (tos);
+}
+
+void report_sock(const char *msg, const struct sockaddr *sa, socklen_t salen,
+                 char *path) {
+  char host[NI_MAXHOST], port[NI_MAXSERV];
+  int herr;
+  int flags = NI_NUMERICSERV;
+
+  if (path != NULL) {
+    fprintf(stderr, "%s on %s\n", msg, path);
+    return;
+  }
+
+  if (nflag)
+    flags |= NI_NUMERICHOST;
+
+  herr = getnameinfo(sa, salen, host, sizeof(host), port, sizeof(port), flags);
+  switch (herr) {
+  case 0:
+    break;
+  case EAI_SYSTEM:
+    err(1, "getnameinfo");
+  default:
+    errx(1, "getnameinfo: %s", gai_strerror(herr));
+  }
+
+  fprintf(stderr, "%s on %s %s\n", msg, host, port);
 }
 
 void help(void) {
