@@ -353,17 +353,9 @@ int main(int argc, char *argv[]) {
       }
 
       if (vflag) {
-        char *proto = proto_name(uflag);
-
-        /* Don't look up port if -n. */
-        if (nflag)
-          sv = NULL;
-        else
-          sv = getservbyport(ntohs(atoi(uport)), proto);
-
-        fprintf(stderr, "Connection from %s port %s [%s/%s] accepted\n",
-                inet_ntoa(((struct sockaddr_in *)(&cliaddr))->sin_addr), uport,
-                proto, sv ? sv->s_name : "*");
+        if (vflag)
+          report_sock("Connection received", (struct sockaddr *)&cliaddr, len,
+                      family == AF_UNIX ? host : NULL);
       }
 
       readwrite(connfd);
@@ -687,6 +679,17 @@ int local_listen(char *host, char *port, struct addrinfo hints) {
   if (!uflag && s != -1) {
     if (listen(s, 1) < 0)
       err(1, "listen");
+  }
+
+  if (vflag && s != -1) {
+    struct sockaddr_storage ss;
+    socklen_t len;
+
+    len = sizeof(ss);
+    if (getsockname(s, (struct sockaddr *)&ss, &len) == -1)
+      err(1, "getsockname");
+    report_sock(uflag ? "Bound" : "Listening", (struct sockaddr *)&ss, len,
+                NULL);
   }
 
   freeaddrinfo(res);
