@@ -113,7 +113,7 @@ int unix_listen(char *);
 void set_common_sockopts(int);
 int parse_iptos(char *);
 void usage(int);
-char *proto_name(int uflag);
+char *proto_name(int);
 
 static int connect_with_timeout(int fd, const struct sockaddr *sa,
                                 socklen_t salen, int ctimeout);
@@ -500,7 +500,7 @@ int unix_listen(char *path) {
   return (s);
 }
 
-char *proto_name(uflag) {
+char *proto_name(int uflag) {
 
   char *proto = NULL;
   if (uflag) {
