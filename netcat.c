@@ -132,7 +132,7 @@ int main(int argc, char *argv[]) {
   struct addrinfo proxyhints;
 
   ret = 1;
-  s = 0;
+  s = -1;
   socksv = 5;
   host = NULL;
   uport = NULL;
@@ -244,18 +244,11 @@ int main(int argc, char *argv[]) {
   argv += optind;
 
   /* Cruft to make sure options are clean, and used properly. */
-  if (argv[0] && !argv[1] && family == AF_UNIX) {
-    if (uflag)
-      errx(1, "cannot use -u and -U");
-
+  if (argc == 1 && family == AF_UNIX) {
     host = argv[0];
-    uport = NULL;
-  } else if (argv[0] && !argv[1]) {
-    if (!lflag)
-      usage(1);
+  } else if (argc == 1 && lflag) {
     uport = argv[0];
-    host = NULL;
-  } else if (argv[0] && argv[1]) {
+  } else if (argc == 2) {
     host = argv[0];
     uport = argv[1];
   } else
@@ -274,13 +267,8 @@ int main(int argc, char *argv[]) {
   if (family != AF_UNIX) {
     memset(&hints, 0, sizeof(struct addrinfo));
     hints.ai_family = family;
-    if (uflag) {
-      hints.ai_socktype = SOCK_DGRAM;
-      hints.ai_protocol = IPPROTO_UDP;
-    } else {
-      hints.ai_socktype = SOCK_STREAM;
-      hints.ai_protocol = IPPROTO_TCP;
-    }
+    hints.ai_socktype = uflag ? SOCK_DGRAM : SOCK_STREAM;
+    hints.ai_protocol = uflag ? IPPROTO_UDP : IPPROTO_TCP;
     if (nflag)
       hints.ai_flags |= AI_NUMERICHOST;
   }
@@ -322,8 +310,11 @@ int main(int argc, char *argv[]) {
 
     /* Allow only one connection at a time, but stay alive. */
     for (;;) {
-      if (family != AF_UNIX)
+      if (family != AF_UNIX) {
+        if (s != -1)
+          close(s);
         s = local_listen(host, uport, hints);
+      }
       if (s < 0)
         err(1, NULL);
       /*
@@ -398,10 +389,12 @@ int main(int argc, char *argv[]) {
         continue;
 
       ret = 0;
-      if (vflag && !uflag) {
+      if (vflag || zflag) {
+        int print_info = 1;
         /* For UDP, make sure we are connected. */
         if (uflag) {
-          if (udptest(s) == -1) {
+          /* No info on failed or skipped test. */
+          if ((print_info = udptest(s)) == -1) {
             ret = 1;
             continue;
           }
@@ -414,18 +407,19 @@ int main(int argc, char *argv[]) {
           sv = getservbyport(ntohs(atoi(portlist[i])), uflag ? "udp" : "tcp");
         }
 
-        fprintf(stderr,
-                "Connection to %s %s port [%s/%s] "
-                "succeeded!\n",
-                host, portlist[i], uflag ? "udp" : "tcp",
-                sv ? sv->s_name : "*");
+        if (print_info == 1)
+          fprintf(stderr,
+                  "Connection to %s %s port [%s/%s] "
+                  "succeeded!\n",
+                  host, portlist[i], uflag ? "udp" : "tcp",
+                  sv ? sv->s_name : "*");
       }
       if (!zflag)
         readwrite(s);
     }
   }
 
-  if (s)
+  if (s != -1)
     close(s);
 
   exit(ret);
@@ -527,15 +521,9 @@ int remote_connect(const char *host, const char *port, struct addrinfo hints) {
       struct addrinfo ahints, *ares;
 
       memset(&ahints, 0, sizeof(struct addrinfo));
-      ahints.ai_family = res0->ai_family;
-      if (uflag) {
-        ahints.ai_socktype = SOCK_DGRAM;
-        ahints.ai_protocol = IPPROTO_UDP;
-
-      } else {
-        ahints.ai_socktype = SOCK_STREAM;
-        ahints.ai_protocol = IPPROTO_TCP;
-      }
+      ahints.ai_family = res->ai_family;
+      ahints.ai_socktype = uflag ? SOCK_DGRAM : SOCK_STREAM;
+      ahints.ai_protocol = uflag ? IPPROTO_UDP : IPPROTO_TCP;
       ahints.ai_flags = AI_PASSIVE;
       if ((error = getaddrinfo(sflag, pflag, &ahints, &ares)))
         errx(1, "getaddrinfo: %s", gai_strerror(error));
